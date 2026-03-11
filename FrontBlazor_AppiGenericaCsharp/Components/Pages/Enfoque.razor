@@ -1,0 +1,227 @@
+@page "/enfoque"
+@rendermode InteractiveServer
+@inject FrontBlazor_AppiGenericaCsharp.Services.ApiService Api
+
+<PageTitle>Enfoque</PageTitle>
+
+<div class="container mt-4">
+    <h3>Enfoque</h3>
+    <p class="lead"> Enfoques pedagógicos y curriculares.</p>
+    @* ───────── ALERTA DE EXITO O ERROR ───────── *@
+    @if (!string.IsNullOrEmpty(mensaje))
+    {
+        <div class="alert @(exito ? "alert-success" : "alert-danger") alert-dismissible fade show">
+            @mensaje
+            <button type="button" class="btn-close" @onclick="() => mensaje = string.Empty"></button>
+        </div>
+    }
+
+    @* ───────── BOTON PARA MOSTRAR FORMULARIO DE CREAR ───────── *@
+    @if (!mostrarFormulario)
+    {
+        <button class="btn btn-primary mb-3" @onclick="NuevoRegistro">Añadir Enfoque</button>
+    }
+
+    @* ───────── FORMULARIO (CREAR / EDITAR) ───────── *@
+    @if (mostrarFormulario)
+    {
+        <div class="card mb-3">
+            <div class="card-header">
+                @(editando ? "Editar Enfoque" : "Nuevo Enfoque")
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">id</label>
+                        <input class="form-control" @bind="campoid" disabled="@editando" />
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">nombre</label>
+                        <input class="form-control" @bind="camponombre" />
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">descripción</label>
+                        <input class="form-control" @bind="campodescripcion" />
+                    </div>
+                </div>
+                <button class="btn btn-success me-2" @onclick="GuardarRegistro">Guardar</button>
+                <button class="btn btn-secondary" @onclick="Cancelar">Cancelar</button>
+            </div>
+        </div>
+    }
+
+    @* ───────── SPINNER DE CARGA ───────── *@
+    @if (cargando)
+    {
+        <div class="d-flex justify-content-center my-4">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Cargando...</span>
+            </div>
+        </div>
+    }
+
+    @* ───────── TABLA DE REGISTROS ───────── *@
+    @if (!cargando && registros.Any())
+    {
+        <table class="table table-striped table-hover">
+            <thead class="table-dark">
+                <tr>
+                    <th>ID</th>
+                    <th>Nombre</th>
+                    <th>Descripción</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var reg in registros)
+                {
+                    <tr>
+                        <td>@reg["id"]</td>
+                        <td>@reg["nombre"]</td>
+                        <td>@reg["descripcion"]</td>
+                        <td>
+                            <button class="btn btn-warning btn-sm me-1"
+                                    @onclick="() => EditarRegistro(reg)">
+                                Editar
+                            </button>
+                            <button class="btn btn-danger btn-sm"
+                                    @onclick="() => EliminarRegistro(reg)">
+                                Eliminar
+                            </button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+
+    @* ───────── MENSAJE CUANDO NO HAY DATOS ───────── *@
+    @if (!cargando && !registros.Any())
+    {
+        <div class="alert alert-warning">No se encontraron registros en la tabla enfoque.</div>
+    }
+</div>
+
+@code {
+    // ───────── VARIABLES DE ESTADO ─────────
+
+    // Lista de registros obtenidos de la API
+    private List<Dictionary<string, object?>> registros = new();
+
+    // Controla si se muestra el spinner de carga
+    private bool cargando = true;
+
+    // Controla si se muestra el formulario
+    private bool mostrarFormulario = false;
+
+    // Indica si estamos editando (true) o creando (false)
+    private bool editando = false;
+
+    // Mensaje de alerta para el usuario
+    private string mensaje = string.Empty;
+
+    // Indica si la ultima operacion fue exitosa (para color de alerta)
+    private bool exito = false;
+
+    // Campos del formulario
+    private string campoid = string.Empty;
+    private string camponombre = string.Empty;
+    private string campodescripcion = string.Empty;
+
+    // ───────── CICLO DE VIDA ─────────
+
+    // Se ejecuta al cargar la pagina por primera vez
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarRegistros();
+    }
+
+    // ───────── METODOS ─────────
+
+    // Obtiene todos los registros de la tabla producto
+    private async Task CargarRegistros()
+    {
+        cargando = true;
+        registros = await Api.ListarAsync("enfoque");
+        cargando = false;
+    }
+
+    // Muestra el formulario vacio para crear un nuevo registro
+    private void NuevoRegistro()
+    {
+        editando = false;
+        campoid = string.Empty;
+        camponombre = string.Empty;
+        campodescripcion = string.Empty;
+        mostrarFormulario = true;
+        mensaje = string.Empty;
+    }
+
+    // Llena el formulario con los datos del registro seleccionado
+    private void EditarRegistro(Dictionary<string, object?> reg)
+    {
+        editando = true;
+        campoid = reg["id"]?.ToString() ?? "";
+        camponombre = reg["nombre"]?.ToString() ?? "";
+        campodescripcion = reg["descripcion"]?.ToString() ?? "";
+        mostrarFormulario = true;
+        mensaje = string.Empty;
+    }
+
+    // Crea o actualiza un registro segun el modo (editando o creando)
+    private async Task GuardarRegistro()
+    {
+        // Arma el diccionario con los datos del formulario
+        var datos = new Dictionary<string, object?>
+        {
+            ["id"] = campoid,
+            ["nombre"] = camponombre,
+            ["descripcion"] = campodescripcion,
+        };
+
+        if (editando)
+        {
+            // PUT /api/area_conocimiento/id/{valor}
+            // No incluimos el id en los datos porque es la clave
+            datos.Remove("id");
+            var resultado = await Api.ActualizarAsync("enfoque", "id", campoid, datos);
+            exito = resultado.exito;
+            mensaje = resultado.mensaje;
+        }
+        else
+        {
+            // POST /api/area_conocimiento
+            var resultado = await Api.CrearAsync("enfoque", datos);
+            exito = resultado.exito;
+            mensaje = resultado.mensaje;
+        }
+
+        if (exito)
+        {
+            mostrarFormulario = false;
+            await CargarRegistros(); // Recargar la tabla
+        }
+    }
+
+    // Elimina un registro despues de confirmacion
+    private async Task EliminarRegistro(Dictionary<string, object?> reg)
+    {
+        string id = reg["id"]?.ToString() ?? "";
+
+        // DELETE /api/enfoque/id/{valor}
+        var resultado = await Api.EliminarAsync("enfoque", "id", id);
+        exito = resultado.exito;
+        mensaje = resultado.mensaje;
+
+        if (exito)
+        {
+            await CargarRegistros(); // Recargar la tabla
+        }
+    }
+
+    // Oculta el formulario sin guardar
+    private void Cancelar()
+    {
+        mostrarFormulario = false;
+        mensaje = string.Empty;
+    }
+}
