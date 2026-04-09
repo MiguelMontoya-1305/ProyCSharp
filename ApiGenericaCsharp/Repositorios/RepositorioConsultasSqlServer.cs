@@ -392,6 +392,8 @@ public async Task<DataTable> EjecutarProcedimientoAlmacenadoConDictionaryAsync(
 
                 if (meta.MaxLength.HasValue && meta.MaxLength.Value > 0)
                     param.Size = meta.MaxLength.Value;
+                else if (meta.MaxLength.HasValue && meta.MaxLength.Value == -1)
+                    param.Size = -1; // -1 indica NVARCHAR(MAX)
 
                 comando.Parameters.Add(param);
             }

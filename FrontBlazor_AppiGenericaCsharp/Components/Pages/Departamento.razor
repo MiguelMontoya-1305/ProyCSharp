@@ -1,0 +1,218 @@
+@page "/departamento"
+@rendermode InteractiveServer
+@inject FrontBlazor_AppiGenericaCsharp.Services.ApiService Api
+
+<PageTitle>Departamento</PageTitle>
+
+<div class="container mt-4">
+    <h3>Departamento</h3>
+    <p class="lead">Administración de departamentos del módulo de Innovación Curricular.</p>
+
+    @if (!string.IsNullOrEmpty(mensaje))
+    {
+        <div class="alert @(exito ? "alert-success" : "alert-danger") alert-dismissible fade show">
+            @mensaje
+            <button type="button" class="btn-close" @onclick="() => mensaje = string.Empty"></button>
+        </div>
+    }
+
+    @if (!mostrarFormulario)
+    {
+        <button class="btn btn-primary mb-3" @onclick="NuevoRegistro">Nuevo Departamento</button>
+    }
+
+    @if (mostrarFormulario)
+    {
+        <div class="card mb-3">
+            <div class="card-header">@(editando ? "Editar Departamento" : "Nuevo Departamento")</div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label">ID</label>
+                        <input class="form-control" @bind="campoid" disabled="@editando" />
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label">Nombre</label>
+                        <input class="form-control" @bind="camponombre" />
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label">Facultad</label>
+                        <select class="form-select" @bind="campoFacultad">
+                            <option value="0">Seleccione una facultad</option>
+                            @foreach (var fac in facultades)
+                            {
+                                <option value="@Convert.ToInt32(fac["id"])">@fac["nombre"]</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+                <button class="btn btn-success me-2" @onclick="GuardarRegistro">Guardar</button>
+                <button class="btn btn-secondary" @onclick="Cancelar">Cancelar</button>
+            </div>
+        </div>
+    }
+
+    @if (cargando)
+    {
+        <div class="d-flex justify-content-center my-4">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Cargando...</span>
+            </div>
+        </div>
+    }
+
+    @if (!cargando && registros.Any())
+    {
+        <table class="table table-striped table-hover">
+            <thead class="table-dark">
+                <tr>
+                    <th>ID</th>
+                    <th>Nombre</th>
+                    <th>Facultad</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var reg in registros)
+                {
+                    <tr>
+                        <td>@reg["id"]</td>
+                        <td>@reg["nombre"]</td>
+                        <td>@ObtenerNombreFacultad(reg["facultad"]?.ToString())</td>
+                        <td>
+                            <button class="btn btn-warning btn-sm me-1" @onclick="() => EditarRegistro(reg)">Editar</button>
+                            <button class="btn btn-danger btn-sm" @onclick="() => EliminarRegistro(reg)">Eliminar</button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+
+    @if (!cargando && !registros.Any())
+    {
+        <div class="alert alert-warning">No se encontraron registros en la tabla departamento.</div>
+    }
+</div>
+
+@code {
+    // ───────── VARIABLES DE ESTADO ─────────
+    // Lista de departamentos obtenidos desde la API
+    private List<Dictionary<string, object?>> registros = new();
+    // Lista de facultades para el select de relación
+    private List<Dictionary<string, object?>> facultades = new();
+    // Controla si se muestra el spinner de carga
+    private bool cargando = true;
+    // Controla si se muestra el formulario de creación/edición
+    private bool mostrarFormulario = false;
+    // Indica si estamos editando un registro existente
+    private bool editando = false;
+    // Mensaje de alerta para el usuario
+    private string mensaje = string.Empty;
+    // Indica si la última operación fue exitosa
+    private bool exito = false;
+
+    // Campos del formulario
+    private string campoid = string.Empty;
+    private string camponombre = string.Empty;
+    private int campoFacultad = 0;
+
+    // ───────── CICLO DE VIDA ─────────
+    // Se ejecuta al inicializar el componente y carga departamentos y facultades
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarFacultades();
+        await CargarRegistros();
+    }
+
+    private async Task CargarRegistros()
+    {
+        cargando = true;
+        registros = await Api.ListarAsync("departamento");
+        cargando = false;
+    }
+
+    private async Task CargarFacultades()
+    {
+        facultades = await Api.ListarAsync("facultad");
+    }
+
+    private void NuevoRegistro()
+    {
+        editando = false;
+        campoid = string.Empty;
+        camponombre = string.Empty;
+        campoFacultad = 0;
+        mostrarFormulario = true;
+        mensaje = string.Empty;
+    }
+
+    private async Task EditarRegistro(Dictionary<string, object?> reg)
+    {
+        editando = true;
+        campoid = reg["id"]?.ToString() ?? string.Empty;
+        camponombre = reg["nombre"]?.ToString() ?? string.Empty;
+        campoFacultad = int.TryParse(reg["facultad"]?.ToString(), out var fac) ? fac : 0;
+        mostrarFormulario = true;
+        mensaje = string.Empty;
+        await CargarFacultades();
+    }
+
+    private async Task GuardarRegistro()
+    {
+        var datos = new Dictionary<string, object?>
+        {
+            ["id"] = campoid,
+            ["nombre"] = camponombre,
+            ["facultad"] = campoFacultad
+        };
+
+        if (editando)
+        {
+            datos.Remove("id");
+            var resultado = await Api.ActualizarAsync("departamento", "id", campoid, datos);
+            exito = resultado.exito;
+            mensaje = resultado.mensaje;
+        }
+        else
+        {
+            var resultado = await Api.CrearAsync("departamento", datos);
+            exito = resultado.exito;
+            mensaje = resultado.mensaje;
+        }
+
+        if (exito)
+        {
+            mostrarFormulario = false;
+            await CargarRegistros();
+        }
+    }
+
+    private async Task EliminarRegistro(Dictionary<string, object?> reg)
+    {
+        var id = reg["id"]?.ToString() ?? string.Empty;
+        var resultado = await Api.EliminarAsync("departamento", "id", id);
+        exito = resultado.exito;
+        mensaje = resultado.mensaje;
+
+        if (exito)
+        {
+            await CargarRegistros();
+        }
+    }
+
+    private void Cancelar()
+    {
+        mostrarFormulario = false;
+        mensaje = string.Empty;
+    }
+
+    private string ObtenerNombreFacultad(string? id)
+    {
+        if (string.IsNullOrEmpty(id))
+            return string.Empty;
+
+        var fac = facultades.FirstOrDefault(f => f["id"]?.ToString() == id);
+        return fac?["nombre"]?.ToString() ?? id;
+    }
+}

@@ -1,0 +1,238 @@
+@page "/facultad"
+@rendermode InteractiveServer
+@inject FrontBlazor_AppiGenericaCsharp.Services.ApiService Api
+
+<PageTitle>Facultad</PageTitle>
+
+<div class="container mt-4">
+    <h3>Facultad</h3>
+    <p class="lead">Administración de facultades del módulo de Innovación Curricular.</p>
+
+    @if (!string.IsNullOrEmpty(mensaje))
+    {
+        <div class="alert @(exito ? "alert-success" : "alert-danger") alert-dismissible fade show">
+            @mensaje
+            <button type="button" class="btn-close" @onclick="() => mensaje = string.Empty"></button>
+        </div>
+    }
+
+    @if (!mostrarFormulario)
+    {
+        <button class="btn btn-primary mb-3" @onclick="NuevoRegistro">Nueva Facultad</button>
+    }
+
+    @if (mostrarFormulario)
+    {
+        <div class="card mb-3">
+            <div class="card-header">@(editando ? "Editar Facultad" : "Nueva Facultad")</div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label">ID</label>
+                        <input class="form-control" @bind="campoid" disabled="@editando" />
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label">Nombre</label>
+                        <input class="form-control" @bind="camponombre" />
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label">Tipo</label>
+                        <input class="form-control" @bind="campotipo" />
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label">Fecha fundación</label>
+                        <input type="date" class="form-control" @bind="campoFechaFun" />
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label">Universidad</label>
+                        <select class="form-select" @bind="campoUniversidad">
+                            <option value="0">Seleccione una universidad</option>
+                            @foreach (var uni in universidades)
+                            {
+                                <option value="@Convert.ToInt32(uni["id"])">@uni["nombre"]</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+                <button class="btn btn-success me-2" @onclick="GuardarRegistro">Guardar</button>
+                <button class="btn btn-secondary" @onclick="Cancelar">Cancelar</button>
+            </div>
+        </div>
+    }
+
+    @if (cargando)
+    {
+        <div class="d-flex justify-content-center my-4">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Cargando...</span>
+            </div>
+        </div>
+    }
+
+    @if (!cargando && registros.Any())
+    {
+        <table class="table table-striped table-hover">
+            <thead class="table-dark">
+                <tr>
+                    <th>ID</th>
+                    <th>Nombre</th>
+                    <th>Tipo</th>
+                    <th>Fecha fundación</th>
+                    <th>Universidad</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var reg in registros)
+                {
+                    <tr>
+                        <td>@reg["id"]</td>
+                        <td>@reg["nombre"]</td>
+                        <td>@reg["tipo"]</td>
+                        <td>@reg["fecha_fun"]</td>
+                        <td>@ObtenerNombreUniversidad(reg["universidad"]?.ToString())</td>
+                        <td>
+                            <button class="btn btn-warning btn-sm me-1" @onclick="() => EditarRegistro(reg)">Editar</button>
+                            <button class="btn btn-danger btn-sm" @onclick="() => EliminarRegistro(reg)">Eliminar</button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+
+    @if (!cargando && !registros.Any())
+    {
+        <div class="alert alert-warning">No se encontraron registros en la tabla facultad.</div>
+    }
+</div>
+
+@code {
+    // ───────── VARIABLES DE ESTADO ─────────
+    // Lista de facultades obtenidas desde la API
+    private List<Dictionary<string, object?>> registros = new();
+    // Lista de universidades para relacionar la facultad con su universidad padre
+    private List<Dictionary<string, object?>> universidades = new();
+    // Controla si se muestra el spinner de carga
+    private bool cargando = true;
+    // Controla si se muestra el formulario de creación/edición
+    private bool mostrarFormulario = false;
+    // Indica si estamos editando un registro existente
+    private bool editando = false;
+    // Mensaje de alerta para el usuario
+    private string mensaje = string.Empty;
+    // Indica si la última operación fue exitosa
+    private bool exito = false;
+
+    // Campos del formulario
+    private string campoid = string.Empty;
+    private string camponombre = string.Empty;
+    private string campotipo = string.Empty;
+    private DateTime? campoFechaFun = DateTime.Today;
+    private int campoUniversidad = 0;
+
+    // ───────── CICLO DE VIDA ─────────
+    // Se ejecuta al inicializar el componente y carga universidades y facultades
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarUniversidades();
+        await CargarRegistros();
+    }
+
+    private async Task CargarRegistros()
+    {
+        cargando = true;
+        registros = await Api.ListarAsync("facultad");
+        cargando = false;
+    }
+
+    private async Task CargarUniversidades()
+    {
+        universidades = await Api.ListarAsync("universidad");
+    }
+
+    private void NuevoRegistro()
+    {
+        editando = false;
+        campoid = string.Empty;
+        camponombre = string.Empty;
+        campotipo = string.Empty;
+        campoFechaFun = DateTime.Today;
+        campoUniversidad = 0;
+        mostrarFormulario = true;
+        mensaje = string.Empty;
+    }
+
+    private async Task EditarRegistro(Dictionary<string, object?> reg)
+    {
+        editando = true;
+        campoid = reg["id"]?.ToString() ?? string.Empty;
+        camponombre = reg["nombre"]?.ToString() ?? string.Empty;
+        campotipo = reg["tipo"]?.ToString() ?? string.Empty;
+        campoFechaFun = reg["fecha_fun"] is DateTime dt ? dt : DateTime.Today;
+        campoUniversidad = int.TryParse(reg["universidad"]?.ToString(), out var uni) ? uni : 0;
+        mostrarFormulario = true;
+        mensaje = string.Empty;
+        await CargarUniversidades();
+    }
+
+    private async Task GuardarRegistro()
+    {
+        var datos = new Dictionary<string, object?>
+        {
+            ["id"] = campoid,
+            ["nombre"] = camponombre,
+            ["tipo"] = campotipo,
+            ["fecha_fun"] = campoFechaFun?.ToString("yyyy-MM-dd"),
+            ["universidad"] = campoUniversidad
+        };
+
+        if (editando)
+        {
+            datos.Remove("id");
+            var resultado = await Api.ActualizarAsync("facultad", "id", campoid, datos);
+            exito = resultado.exito;
+            mensaje = resultado.mensaje;
+        }
+        else
+        {
+            var resultado = await Api.CrearAsync("facultad", datos);
+            exito = resultado.exito;
+            mensaje = resultado.mensaje;
+        }
+
+        if (exito)
+        {
+            mostrarFormulario = false;
+            await CargarRegistros();
+        }
+    }
+
+    private async Task EliminarRegistro(Dictionary<string, object?> reg)
+    {
+        var id = reg["id"]?.ToString() ?? string.Empty;
+        var resultado = await Api.EliminarAsync("facultad", "id", id);
+        exito = resultado.exito;
+        mensaje = resultado.mensaje;
+
+        if (exito)
+        {
+            await CargarRegistros();
+        }
+    }
+
+    private void Cancelar()
+    {
+        mostrarFormulario = false;
+        mensaje = string.Empty;
+    }
+
+    private string ObtenerNombreUniversidad(string? id)
+    {
+        if (string.IsNullOrEmpty(id))
+            return "";
+
+        var uni = universidades.FirstOrDefault(u => u["id"]?.ToString() == id);
+        return uni?["nombre"]?.ToString() ?? id;
+    }
+}

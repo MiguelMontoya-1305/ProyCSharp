@@ -141,7 +141,6 @@
     private bool exito = false;
 
     // Campos del formulario
-    private string campoid = string.Empty;
     private string camponit = string.Empty;
     private string camporazon_social = string.Empty;
     private string camponombre_contacto = string.Empty;
@@ -185,7 +184,7 @@
     private void EditarRegistro(Dictionary<string, object?> reg)
     {
         editando = true;
-        campoid = reg["nit"]?.ToString() ?? "";
+        camponit = reg["nit"]?.ToString() ?? "";
         camporazon_social = reg["razon_social"]?.ToString() ?? "";
         camponombre_contacto = reg["nombre_contacto"]?.ToString() ?? "";
         campocorreo = reg["correo"]?.ToString() ?? "";
