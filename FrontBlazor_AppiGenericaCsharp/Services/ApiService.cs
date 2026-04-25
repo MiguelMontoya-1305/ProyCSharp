@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using System.Net.Security;
 using System.Text.Json;
 
 namespace FrontBlazor_AppiGenericaCsharp.Services
@@ -10,6 +11,9 @@ namespace FrontBlazor_AppiGenericaCsharp.Services
         // HttpClient configurado en Program.cs con la URL base de la API
         private readonly HttpClient _http;
 
+        // Servicio de autenticacion para obtener el token JWT
+        private readonly AuthService? _auth;
+
         // Opciones para deserializar JSON sin distinguir mayusculas/minusculas
         // La API devuelve "datos", "estado", etc. en minuscula
         private readonly JsonSerializerOptions _jsonOptions = new()
@@ -18,60 +22,97 @@ namespace FrontBlazor_AppiGenericaCsharp.Services
         };
 
         // El constructor recibe el HttpClient inyectado por DI
-        public ApiService(HttpClient http)
+        public ApiService(HttpClient http, AuthService? auth = null)
         {
             _http = http;
+            _auth = auth;
         }
-
-        // ──────────────────────────────────────────────
-        // LISTAR: GET /api/{tabla}
-        // Devuelve la lista de registros como diccionarios
-        // ──────────────────────────────────────────────
-public async Task<List<Dictionary<string, object?>>> ListarAsync(string tabla)
-{
-    try
-    {
-        var response = await _http.GetAsync($"/api/{tabla}");
-
-        if (!response.IsSuccessStatusCode)
-            return new List<Dictionary<string, object?>>();
-
-        var contenido = await response.Content.ReadAsStringAsync();
-
-        // Si la API devuelve vacío (cuando no hay registros)
-        if (string.IsNullOrWhiteSpace(contenido))
-            return new List<Dictionary<string, object?>>();
-
-        var respuesta = JsonSerializer.Deserialize<JsonElement>(contenido, _jsonOptions);
-
-        if (respuesta.TryGetProperty("datos", out JsonElement datos))
+        /// <summary>
+        /// Agrega el token JWT al header Authorization antes de cada request.
+        /// Si no hay token (no ha hecho login), no agrega nada y la API
+        /// funciona sin autenticacion (endpoints sin [Authorize]).
+        /// </summary>
+        private void AgregarTokenJwt()
         {
-            return ConvertirDatos(datos);
+            _http.DefaultRequestHeaders.Remove("Authorization");
+            if (_auth?.Token != null)
+                _http.DefaultRequestHeaders.Add("Authorization", $"Bearer {_auth.Token}");
         }
 
-        return new List<Dictionary<string, object?>>();
-    }
-    catch (Exception ex)
-    {
-        Console.WriteLine($"Error al listar {tabla}: {ex.Message}");
-        return new List<Dictionary<string, object?>>();
-    }
-}
-
+// ──────────────────────────────────────────────
+        // LISTAR: GET /api/{tabla}
         // ──────────────────────────────────────────────
-        // CREAR: POST /api/{tabla}
-        // Envia los datos del formulario como JSON
-        // Devuelve (exito, mensaje) para mostrar al usuario
-        // ──────────────────────────────────────────────
-        public async Task<(bool exito, string mensaje)> CrearAsync(
-            string tabla, Dictionary<string, object?> datos)
+        public async Task<List<Dictionary<string, object?>>> ListarAsync(
+            string tabla, int? limite = null)
         {
             try
             {
-                var respuesta = await _http.PostAsJsonAsync($"/api/{tabla}", datos);
-                var contenido = await respuesta.Content.ReadFromJsonAsync<JsonElement>(_jsonOptions);
+                AgregarTokenJwt();
+                string url = $"/api/{tabla}";
+                if (limite.HasValue)
+                    url += $"?limite={limite.Value}";
 
-                string mensaje = contenido.TryGetProperty("mensaje", out JsonElement msg)
+                using var respuesta = await _http.GetAsync(url);
+                if (!respuesta.IsSuccessStatusCode)
+                {
+                    Console.WriteLine($"Error al listar {tabla}: {respuesta.StatusCode}");
+                    return new List<Dictionary<string, object?>>();
+                }
+
+                if (respuesta.StatusCode == System.Net.HttpStatusCode.NoContent)
+                    return new List<Dictionary<string, object?>>();
+
+                var contenidoTexto = await respuesta.Content.ReadAsStringAsync();
+                if (string.IsNullOrWhiteSpace(contenidoTexto))
+                    return new List<Dictionary<string, object?>>();
+
+                var respuestaJson = JsonSerializer.Deserialize<JsonElement>(
+                    contenidoTexto, _jsonOptions);
+                if (respuestaJson.ValueKind == JsonValueKind.Undefined ||
+                    !respuestaJson.TryGetProperty("datos", out JsonElement datos))
+                {
+                    return new List<Dictionary<string, object?>>();
+                }
+
+                return ConvertirDatos(datos);
+            }
+            catch (HttpRequestException ex)
+            {
+                Console.WriteLine($"Error al listar {tabla}: {ex.Message}");
+                return new List<Dictionary<string, object?>>();
+            }
+            catch (JsonException ex)
+            {
+                Console.WriteLine($"Error JSON al listar {tabla}: {ex.Message}");
+                return new List<Dictionary<string, object?>>();
+            }
+        }
+
+        // ──────────────────────────────────────────────
+        // CREAR: POST /api/{tabla}
+        // ──────────────────────────────────────────────
+        public async Task<(bool exito, string mensaje)> CrearAsync(
+            string tabla, Dictionary<string, object?> datos,
+            string? camposEncriptar = null)
+        {
+            try
+            {
+                AgregarTokenJwt();
+                string url = $"/api/{tabla}";
+                if (!string.IsNullOrEmpty(camposEncriptar))
+                    url += $"?camposEncriptar={camposEncriptar}";
+
+                var respuesta = await _http.PostAsJsonAsync(url, datos);
+                if (respuesta.StatusCode == System.Net.HttpStatusCode.NoContent)
+                    return (respuesta.IsSuccessStatusCode, "Operacion completada.");
+
+                var contenido = await respuesta.Content.ReadAsStringAsync();
+                if (string.IsNullOrWhiteSpace(contenido))
+                    return (respuesta.IsSuccessStatusCode, "Operacion completada.");
+
+                var json = JsonSerializer.Deserialize<JsonElement>(contenido, _jsonOptions);
+
+                string mensaje = json.TryGetProperty("mensaje", out JsonElement msg)
                     ? msg.GetString() ?? "Operacion completada."
                     : "Operacion completada.";
 
@@ -80,24 +121,39 @@ public async Task<List<Dictionary<string, object?>>> ListarAsync(string tabla)
             catch (HttpRequestException ex)
             {
                 return (false, $"Error de conexion: {ex.Message}");
+            }
+            catch (JsonException ex)
+            {
+                return (false, $"Error de parseo JSON: {ex.Message}");
             }
         }
 
         // ──────────────────────────────────────────────
         // ACTUALIZAR: PUT /api/{tabla}/{clave}/{valor}
-        // Envia los campos a modificar como JSON
         // ──────────────────────────────────────────────
         public async Task<(bool exito, string mensaje)> ActualizarAsync(
             string tabla, string nombreClave, string valorClave,
-            Dictionary<string, object?> datos)
+            Dictionary<string, object?> datos,
+            string? camposEncriptar = null)
         {
             try
             {
-                var respuesta = await _http.PutAsJsonAsync(
-                    $"/api/{tabla}/{nombreClave}/{valorClave}", datos);
-                var contenido = await respuesta.Content.ReadFromJsonAsync<JsonElement>(_jsonOptions);
+                AgregarTokenJwt();
+                string url = $"/api/{tabla}/{nombreClave}/{valorClave}";
+                if (!string.IsNullOrEmpty(camposEncriptar))
+                    url += $"?camposEncriptar={camposEncriptar}";
 
-                string mensaje = contenido.TryGetProperty("mensaje", out JsonElement msg)
+                var respuesta = await _http.PutAsJsonAsync(url, datos);
+                if (respuesta.StatusCode == System.Net.HttpStatusCode.NoContent)
+                    return (respuesta.IsSuccessStatusCode, "Operacion completada.");
+
+                var contenido = await respuesta.Content.ReadAsStringAsync();
+                if (string.IsNullOrWhiteSpace(contenido))
+                    return (respuesta.IsSuccessStatusCode, "Operacion completada.");
+
+                var json = JsonSerializer.Deserialize<JsonElement>(contenido, _jsonOptions);
+
+                string mensaje = json.TryGetProperty("mensaje", out JsonElement msg)
                     ? msg.GetString() ?? "Operacion completada."
                     : "Operacion completada.";
 
@@ -107,22 +163,33 @@ public async Task<List<Dictionary<string, object?>>> ListarAsync(string tabla)
             {
                 return (false, $"Error de conexion: {ex.Message}");
             }
+            catch (JsonException ex)
+            {
+                return (false, $"Error de parseo JSON: {ex.Message}");
+            }
         }
 
         // ──────────────────────────────────────────────
         // ELIMINAR: DELETE /api/{tabla}/{clave}/{valor}
-        // Solo necesita la clave primaria para identificar el registro
         // ──────────────────────────────────────────────
         public async Task<(bool exito, string mensaje)> EliminarAsync(
             string tabla, string nombreClave, string valorClave)
         {
             try
             {
+                AgregarTokenJwt();
                 var respuesta = await _http.DeleteAsync(
                     $"/api/{tabla}/{nombreClave}/{valorClave}");
-                var contenido = await respuesta.Content.ReadFromJsonAsync<JsonElement>(_jsonOptions);
+                if (respuesta.StatusCode == System.Net.HttpStatusCode.NoContent)
+                    return (respuesta.IsSuccessStatusCode, "Operacion completada.");
 
-                string mensaje = contenido.TryGetProperty("mensaje", out JsonElement msg)
+                var contenido = await respuesta.Content.ReadAsStringAsync();
+                if (string.IsNullOrWhiteSpace(contenido))
+                    return (respuesta.IsSuccessStatusCode, "Operacion completada.");
+
+                var json = JsonSerializer.Deserialize<JsonElement>(contenido, _jsonOptions);
+
+                string mensaje = json.TryGetProperty("mensaje", out JsonElement msg)
                     ? msg.GetString() ?? "Operacion completada."
                     : "Operacion completada.";
 
@@ -132,13 +199,49 @@ public async Task<List<Dictionary<string, object?>>> ListarAsync(string tabla)
             {
                 return (false, $"Error de conexion: {ex.Message}");
             }
+            catch (JsonException ex)
+            {
+                return (false, $"Error de parseo JSON: {ex.Message}");
+            }
         }
 
         // ──────────────────────────────────────────────
-        // METODO AUXILIAR: Convierte JsonElement a lista de diccionarios
-        // La API devuelve los datos como JSON generico, este metodo
-        // lo transforma a Dictionary<string, object?> para trabajar
-        // facilmente con @foreach y @bind en Blazor
+        // DIAGNOSTICO: GET /api/diagnostico/conexion
+        // ──────────────────────────────────────────────
+        public async Task<Dictionary<string, string>?> ObtenerDiagnosticoAsync()
+        {
+            try
+            {
+                using var respuesta = await _http.GetAsync("/api/diagnostico/conexion");
+                if (!respuesta.IsSuccessStatusCode)
+                    return null;
+
+                var contenidoTexto = await respuesta.Content.ReadAsStringAsync();
+                if (string.IsNullOrWhiteSpace(contenidoTexto))
+                    return null;
+
+                var json = JsonSerializer.Deserialize<JsonElement>(contenidoTexto, _jsonOptions);
+
+                if (json.TryGetProperty("servidor", out JsonElement servidor))
+                {
+                    var info = new Dictionary<string, string>();
+                    foreach (var prop in servidor.EnumerateObject())
+                    {
+                        info[prop.Name] = prop.Value.ToString();
+                    }
+                    return info;
+                }
+
+                return null;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        // ──────────────────────────────────────────────
+        // Convierte JsonElement a lista de diccionarios
         // ──────────────────────────────────────────────
         private List<Dictionary<string, object?>> ConvertirDatos(JsonElement datos)
         {
@@ -150,11 +253,11 @@ public async Task<List<Dictionary<string, object?>>> ListarAsync(string tabla)
 
                 foreach (var propiedad in fila.EnumerateObject())
                 {
-                    // Convierte cada valor JSON a su tipo .NET correspondiente
                     diccionario[propiedad.Name] = propiedad.Value.ValueKind switch
                     {
                         JsonValueKind.String => propiedad.Value.GetString(),
-                        JsonValueKind.Number => propiedad.Value.TryGetInt32(out int i) ? i : propiedad.Value.GetDouble(),
+                        JsonValueKind.Number => propiedad.Value.TryGetInt32(out int i)
+                            ? i : propiedad.Value.GetDouble(),
                         JsonValueKind.True => true,
                         JsonValueKind.False => false,
                         JsonValueKind.Null => null,

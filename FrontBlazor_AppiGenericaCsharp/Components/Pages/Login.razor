@@ -1,0 +1,72 @@
+@page "/login"
+@layout FrontBlazor_AppiGenericaCsharp.Components.Layout.EmptyLayout
+@inject FrontBlazor_AppiGenericaCsharp.Services.AuthService auth
+@inject NavigationManager nav
+@rendermode InteractiveServer
+
+<div class="d-flex justify-content-center align-items-center" style="min-height:100vh;background:#f0f2f5">
+    <div class="card shadow" style="width:400px">
+        <div class="card-header text-center" style="background:var(--bs-primary, #0d6efd);color:white">
+            <h4 class="mb-0">Innovacion Curricular</h4>
+        </div>
+        <div class="card-body p-4">
+            @if (!string.IsNullOrEmpty(error))
+            {
+                <div class="alert alert-danger small py-2 alert-dismissible fade show">
+                    @error
+                    <button type="button" class="btn-close" @onclick='() => error = ""'></button>
+                </div>
+            }
+
+            <div class="mb-3">
+                <label class="form-label small">Correo electronico</label>
+                <input type="email" class="form-control" @bind="email" />
+            </div>
+            <div class="mb-3">
+                <label class="form-label small">Contrasena</label>
+                <input type="password" class="form-control" @bind="contrasena"
+                       @onkeypress="OnKeyPress" />
+            </div>
+            <button class="btn btn-primary w-100" @onclick="DoLogin" disabled="@cargando">
+                @if (cargando)
+                {
+                    <span class="spinner-border spinner-border-sm me-1"></span>
+                }
+                Iniciar sesion
+            </button>
+            <div class="text-center mt-3">
+                <a href="/recuperar-contrasena" class="small text-muted">Olvido su contrasena?</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    string email = "", contrasena = "", error = "";
+    bool cargando;
+
+    async Task DoLogin()
+    {
+        error = "";
+        cargando = true;
+        var (ok, msg) = await auth.Login(email, contrasena);
+        cargando = false;
+        if (ok)
+        {
+            // Si recupero contrasena, forzar cambio
+            if (auth.DebeCambiarContrasena || auth.DebeForcarCambio(email))
+            {
+                auth.DebeCambiarContrasena = true;
+                nav.NavigateTo("/cambiar-contrasena", forceLoad: false);
+            }
+            else
+                nav.NavigateTo("/", forceLoad: false);
+        }
+        else error = msg;
+    }
+
+    async Task OnKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await DoLogin();
+    }
+}

@@ -1,0 +1,65 @@
+@page "/recuperar-contrasena"
+@layout FrontBlazor_AppiGenericaCsharp.Components.Layout.EmptyLayout
+@inject FrontBlazor_AppiGenericaCsharp.Services.AuthService auth
+@inject NavigationManager nav
+@inject IConfiguration config
+@rendermode InteractiveServer
+
+<div class="d-flex justify-content-center align-items-center" style="min-height:100vh;background:#f0f2f5">
+    <div class="card shadow" style="width:400px">
+        <div class="card-header text-center bg-info text-white">
+            <h5 class="mb-0">Recuperar Contrasena</h5>
+        </div>
+        <div class="card-body p-4">
+            @if (!string.IsNullOrEmpty(mensaje))
+            {
+                <div class='alert alert-@tipoMensaje small py-2'>@mensaje</div>
+            }
+
+            <p class="small text-muted">Ingrese su correo para recibir una contrasena temporal.</p>
+
+            <div class="mb-3">
+                <label class="form-label small">Correo electronico</label>
+                <input type="email" class="form-control" @bind="email" />
+            </div>
+            <button class="btn btn-info w-100 text-white" @onclick="Recuperar" disabled="@cargando">
+                @if (cargando)
+                {
+                    <span class="spinner-border spinner-border-sm me-1"></span>
+                }
+                Enviar
+            </button>
+            <div class="text-center mt-3">
+                <a href="/login" class="small text-muted">Volver al login</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    string email = "", mensaje = "", tipoMensaje = "info";
+    bool cargando;
+
+    async Task Recuperar()
+    {
+        mensaje = "";
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            tipoMensaje = "danger";
+            mensaje = "Ingrese su correo electronico.";
+            return;
+        }
+
+        cargando = true;
+        // Llama al AuthService que:
+        // 1. Verifica que el email exista
+        // 2. Genera temporal aleatoria
+        // 3. La guarda con BCrypt
+        // 4. Intenta enviar por SMTP
+        var (ok, msg) = await auth.RecuperarContrasena(email, config);
+        cargando = false;
+
+        tipoMensaje = ok ? "success" : "danger";
+        mensaje = msg;
+    }
+}

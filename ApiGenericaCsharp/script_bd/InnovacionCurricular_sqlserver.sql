@@ -241,16 +241,12 @@ CREATE TABLE aa_rc (
     CONSTRAINT fk_aa_rc_registro FOREIGN KEY (registro_calificado_codigo) REFERENCES registro_calificado(codigo) ON DELETE CASCADE
 );
 
-CREATE TABLE docente_departamento (
-    docente NVARCHAR(50) NOT NULL,
-    departamento INT NOT NULL,
-    dedicacion NVARCHAR(100) NOT NULL,
-    modalidad NVARCHAR(100) NOT NULL,
-    fecha_ingreso DATE NOT NULL,
-    fecha_salida DATE NULL,
-    CONSTRAINT pk_docente_departamento PRIMARY KEY (docente, departamento),
-    CONSTRAINT fk_docente_departamento_docente FOREIGN KEY (docente) REFERENCES docente(cedula),
-    CONSTRAINT fk_docente_departamento_departamento FOREIGN KEY (departamento) REFERENCES departamento(id)
+CREATE TABLE departamento (
+    id INT IDENTITY(1,1) NOT NULL,
+    nombre NVARCHAR(200) NOT NULL,
+    facultad INT NOT NULL,
+    CONSTRAINT pk_departamento PRIMARY KEY (id),
+    CONSTRAINT fk_departamento_facultad FOREIGN KEY (facultad) REFERENCES facultad(id)
 );
 
 CREATE TABLE alianza (
