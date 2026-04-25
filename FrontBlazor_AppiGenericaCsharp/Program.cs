@@ -1,4 +1,6 @@
 using FrontBlazor_AppiGenericaCsharp.Components;
+using FrontBlazor_AppiGenericaCsharp.Services;
+using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -6,19 +8,27 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
+// Registrar ProtectedSessionStorage para AuthService
+builder.Services.AddScoped<ProtectedSessionStorage>();
+
 // Configurar HttpClient para conectarse a la API
-// La URL base apunta a la API ApiGenericaCsharp que corre en el puerto 5034
+// La URL base se lee de appsettings.json
+var apiBaseUrl = builder.Configuration["ApiBaseUrl"] ?? "http://localhost:5035";
 builder.Services.AddScoped(sp => new HttpClient
 {
-    BaseAddress = new Uri("http://localhost:5035")
+    BaseAddress = new Uri(apiBaseUrl)
 });
 
-// Registrar el servicio generico de la API
-builder.Services.AddScoped<FrontBlazor_AppiGenericaCsharp.Services.ApiService>();
+// Registrar los servicios de la API
+// AuthService se registra PRIMERO porque ApiService lo necesita para el token JWT
+builder.Services.AddScoped<AuthService>();
+builder.Services.AddScoped<FrontBlazor_AppiGenericaCsharp.Services.ApiService>(sp =>
+    new ApiService(sp.GetRequiredService<HttpClient>(), sp.GetRequiredService<AuthService>()));
 builder.Services.AddScoped<FrontBlazor_AppiGenericaCsharp.Services.SpService>();
 
 var app = builder.Build();
 
+// Configurar el pipeline HTTP.
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
