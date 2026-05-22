@@ -145,6 +145,13 @@ builder.Services.AddSingleton<
 var proveedorBD = builder.Configuration.GetValue<string>("DatabaseProvider") ?? "SqlServer";
 
 // -----------------------------------------------------------------
+// REGISTRO DE SERVICIO DE REGISTRO Y ROLES (DIP)
+// -----------------------------------------------------------------
+builder.Services.AddScoped<
+    ApiGenericaCsharp.Servicios.Abstracciones.IServicioRegistroYRoles,
+    ApiGenericaCsharp.Servicios.ServicioRegistroYRoles>();
+
+// -----------------------------------------------------------------
 // REGISTRO DE SERVICIO CONSULTAS (DIP)
 // -----------------------------------------------------------------
 builder.Services.AddScoped<ApiGenericaCsharp.Servicios.Abstracciones.IServicioConsultas,
