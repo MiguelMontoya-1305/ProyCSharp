@@ -1,0 +1,469 @@
+@page "/admin/usuarios"
+@rendermode InteractiveServer
+@inject HttpClient Http
+@inject AuthService Auth
+@inject IJSRuntime JS
+
+<PageTitle>Administración de Usuarios y Roles</PageTitle>
+
+<div class="container-fluid py-4" style="background: #f8f9fa; min-height: 100vh;">
+    
+    @if (!Auth.EstaAutenticado || !Auth.Roles.Contains("Admin"))
+    {
+        <div class="row justify-content-center mt-5">
+            <div class="col-md-6">
+                <div class="card border-danger shadow-sm">
+                    <div class="card-body text-center p-5">
+                        <i class="fas fa-lock fa-3x text-danger mb-3 d-block"></i>
+                        <h4 class="card-title text-danger">Acceso Denegado</h4>
+                        <p class="card-text text-muted">
+                            @(mensaje)
+                        </p>
+                        <a href="/" class="btn btn-primary">Volver al inicio</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        return;
+    }
+    
+    <!-- HEADER -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h1 class="mb-1">
+                        <i class="fas fa-users-cog text-primary me-2"></i>Administración de Usuarios
+                    </h1>
+                    <p class="text-muted mb-0">Gestiona usuarios, roles y permisos del sistema</p>
+                </div>
+                <button class="btn btn-primary btn-lg" @onclick="RefrescarDatos">
+                    <i class="fas fa-sync-alt me-2"></i>Refrescar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(mensaje))
+    {
+        <div class="alert alert-@(tipoMensaje == "error" ? "danger" : "success") alert-dismissible fade show" role="alert">
+            <i class="fas @(tipoMensaje == "error" ? "fa-exclamation-circle" : "fa-check-circle") me-2"></i>
+            @mensaje
+            <button type="button" class="btn-close" @onclick="() => mensaje = string.Empty"></button>
+        </div>
+    }
+
+    <!-- TABS -->
+    <ul class="nav nav-tabs mb-4" role="tablist" style="border-bottom: 2px solid #dee2e6;">
+        <li class="nav-item">
+            <button class="nav-link @(tabActiva == "usuarios" ? "active" : "")" 
+                    @onclick="@(() => tabActiva = "usuarios")">
+                <i class="fas fa-users me-2"></i>Usuarios
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link @(tabActiva == "roles" ? "active" : "")" 
+                    @onclick="@(() => tabActiva = "roles")">
+                <i class="fas fa-user-tag me-2"></i>Roles
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link @(tabActiva == "rutas" ? "active" : "")" 
+                    @onclick="@(() => tabActiva = "rutas")">
+                <i class="fas fa-map me-2"></i>Rutas/Permisos
+            </button>
+        </li>
+    </ul>
+
+    <!-- TAB: USUARIOS -->
+    @if (tabActiva == "usuarios")
+    {
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light" style="background: #f8f9fa;">
+                            <tr>
+                                <th style="width: 30%;">Email</th>
+                                <th style="width: 20%;">Roles Actuales</th>
+                                <th style="width: 30%;">Asignar Rol</th>
+                                <th style="width: 20%;">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (usuarios.Count == 0)
+                            {
+                                <tr>
+                                    <td colspan="4" class="text-center text-muted py-4">
+                                        <i class="fas fa-inbox fa-2x mb-2 d-block"></i>
+                                        No hay usuarios registrados
+                                    </td>
+                                </tr>
+                            }
+                            else
+                            {
+                                @foreach (var usuario in usuarios)
+                                {
+                                    <tr>
+                                        <td>
+                                            <strong>@usuario.Email</strong>
+                                        </td>
+                                        <td>
+                                            @if (usuariosRoles.ContainsKey(usuario.Email) && usuariosRoles[usuario.Email].Count > 0)
+                                            {
+                                                @foreach (var rol in usuariosRoles[usuario.Email])
+                                                {
+                                                    <span class="badge bg-info me-1">@rol</span>
+                                                }
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted">Sin roles</span>
+                                            }
+                                        </td>
+                                        <td>
+                                            <div class="input-group input-group-sm">
+                                                <select class="form-select" @bind="rolSeleccionadoPor[usuario.Email]">
+                                                    <option value="">Selecciona un rol...</option>
+                                                    @foreach (var rol in rolesDisponibles.Where(r => r.Id != 1))
+                                                    {
+                                                        <option value="@rol.Id">@rol.Nombre</option>
+                                                    }
+                                                </select>
+                                                <button class="btn btn-success" 
+                                                        @onclick="@(() => AsignarRolAsync(usuario.Email, rolSeleccionadoPor[usuario.Email]))"
+                                                        disabled="@(string.IsNullOrEmpty(rolSeleccionadoPor[usuario.Email]) || asignandoRol)">
+                                                    <i class="fas fa-plus me-1"></i>Asignar
+                                                </button>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <button class="btn btn-sm btn-outline-primary me-1">
+                                                <i class="fas fa-edit me-1"></i>Ver
+                                            </button>
+                                            <button class="btn btn-sm btn-outline-danger"
+                                                    @onclick="@(() => RevocarRoleAsync(usuario.Email))">
+                                                <i class="fas fa-trash-alt me-1"></i>Remover
+                                            </button>
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- TAB: ROLES -->
+    @if (tabActiva == "roles")
+    {
+        <div class="row">
+            @if (rolesDisponibles.Count == 0)
+            {
+                <div class="col-12">
+                    <div class="card shadow-sm border-0 text-center py-5">
+                        <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+                        <p class="text-muted">No hay roles disponibles</p>
+                    </div>
+                </div>
+            }
+            else
+            {
+                @foreach (var rol in rolesDisponibles)
+                {
+                    <div class="col-md-6 col-lg-4 mb-4">
+                        <div class="card shadow-sm border-0 h-100 hover-shadow" style="cursor: pointer; transition: all 0.3s;">
+                            <div class="card-body">
+                                <h5 class="card-title">
+                                    <i class="fas fa-user-tag text-primary me-2"></i>@rol.Nombre
+                                </h5>
+                                <p class="card-text text-muted mb-3">
+                                    ID: <code>@rol.Id</code>
+                                </p>
+                                <div>
+                                    <small class="text-muted d-block mb-2">Rutas asignadas:</small>
+                                    <div class="d-flex flex-wrap gap-1">
+                                        @if (rolesConRutas.ContainsKey(rol.Id))
+                                        {
+                                            @foreach (var ruta in rolesConRutas[rol.Id].Take(3))
+                                            {
+                                                <span class="badge bg-light text-dark" title="@ruta">@ruta</span>
+                                            }
+                                            @if (rolesConRutas[rol.Id].Count > 3)
+                                            {
+                                                <span class="badge bg-light text-dark">+@(rolesConRutas[rol.Id].Count - 3)</span>
+                                            }
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted">Sin rutas</span>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+    }
+
+    <!-- TAB: RUTAS -->
+    @if (tabActiva == "rutas")
+    {
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-light">
+                <h5 class="mb-0">
+                    <i class="fas fa-map me-2"></i>Rutas y Permisos del Sistema
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Ruta</th>
+                                <th>Descripción</th>
+                                <th>Roles que la pueden acceder</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (rutasDisponibles.Count == 0)
+                            {
+                                <tr>
+                                    <td colspan="3" class="text-center text-muted py-4">
+                                        <i class="fas fa-inbox fa-2x mb-2 d-block"></i>
+                                        No hay rutas disponibles
+                                    </td>
+                                </tr>
+                            }
+                            else
+                            {
+                                @foreach (var ruta in rutasDisponibles)
+                                {
+                                    <tr>
+                                        <td>
+                                            <code class="text-primary">@ruta.Ruta</code>
+                                        </td>
+                                        <td>
+                                            @ruta.Descripcion
+                                        </td>
+                                        <td>
+                                            @if (rutasRoles.ContainsKey(ruta.Id) && rutasRoles[ruta.Id].Count > 0)
+                                            {
+                                                @foreach (var rol in rutasRoles[ruta.Id])
+                                                {
+                                                    <span class="badge bg-primary">@rol</span>
+                                                }
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted">Sin roles asignados</span>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    // Clases para estructura de datos
+    private class UsuarioItem
+    {
+        public int Id { get; set; }
+        public string Email { get; set; } = string.Empty;
+    }
+
+    private class RolItem
+    {
+        public int Id { get; set; }
+        public string Nombre { get; set; } = string.Empty;
+    }
+
+    private class RutaItem
+    {
+        public int Id { get; set; }
+        public string Ruta { get; set; } = string.Empty;
+        public string Descripcion { get; set; } = string.Empty;
+    }
+
+    // Variables de estado
+    private string tabActiva = "usuarios";
+    private string mensaje = string.Empty;
+    private string tipoMensaje = "error";
+    private bool asignandoRol = false;
+
+    private List<UsuarioItem> usuarios = new();
+    private List<RolItem> rolesDisponibles = new();
+    private List<RutaItem> rutasDisponibles = new();
+
+    private Dictionary<string, List<string>> usuariosRoles = new();
+    private Dictionary<int, List<string>> rolesConRutas = new();
+    private Dictionary<int, List<string>> rutasRoles = new();
+    private Dictionary<string, string> rolSeleccionadoPor = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Verificar que sea admin - mostrar en la página si no lo es
+        if (!Auth.EstaAutenticado)
+        {
+            mensaje = "Debes estar autenticado para acceder a esta página.";
+            tipoMensaje = "error";
+            return;
+        }
+
+        if (!Auth.Roles.Contains("Admin"))
+        {
+            mensaje = "Acceso denegado: Solo administradores pueden acceder a esta página.";
+            tipoMensaje = "error";
+            return;
+        }
+
+        await CargarDatosAsync();
+    }
+
+    private async Task CargarDatosAsync()
+    {
+        try
+        {
+            // Cargar usuarios (deberías hacer esto desde un endpoint específico)
+            // Por ahora, datos de ejemplo
+            usuarios = new()
+            {
+                new UsuarioItem { Id = 1, Email = "juan@example.com" },
+                new UsuarioItem { Id = 2, Email = "maria@example.com" },
+                new UsuarioItem { Id = 3, Email = "carlos@example.com" }
+            };
+
+            rolesDisponibles = new()
+            {
+                new RolItem { Id = 1, Nombre = "Admin" },
+                new RolItem { Id = 2, Nombre = "Usuario" },
+                new RolItem { Id = 3, Nombre = "Vendedor" },
+                new RolItem { Id = 4, Nombre = "Gerente" }
+            };
+
+            rutasDisponibles = new()
+            {
+                new RutaItem { Id = 1, Ruta = "/", Descripcion = "Página principal" },
+                new RutaItem { Id = 2, Ruta = "/admin/usuarios", Descripcion = "Administración de usuarios" },
+                new RutaItem { Id = 3, Ruta = "/rol", Descripcion = "Gestión de roles" },
+                new RutaItem { Id = 4, Ruta = "/programa", Descripcion = "Programas académicos" },
+                new RutaItem { Id = 5, Ruta = "/facultad", Descripcion = "Gestión de facultades" },
+                new RutaItem { Id = 6, Ruta = "/departamento", Descripcion = "Gestión de departamentos" }
+            };
+
+            // Inicializar diccionarios
+            foreach (var usuario in usuarios)
+            {
+                usuariosRoles[usuario.Email] = new();
+                rolSeleccionadoPor[usuario.Email] = "";
+            }
+
+            // Datos de ejemplo para roles y rutas
+            rolesConRutas = new()
+            {
+                { 1, new() { "/", "/admin/usuarios", "/rol", "/programa" } },
+                { 2, new() { "/" } },
+                { 3, new() { "/", "/facultad" } },
+                { 4, new() { "/", "/programa", "/departamento" } }
+            };
+
+            rutasRoles = new()
+            {
+                { 1, new() { "Admin", "Gerente" } },
+                { 2, new() { "Admin" } },
+                { 3, new() { "Admin" } },
+                { 4, new() { "Admin", "Gerente" } },
+                { 5, new() { "Gerente" } },
+                { 6, new() { "Gerente" } }
+            };
+
+            await Task.CompletedTask;
+        }
+        catch (Exception ex)
+        {
+            mensaje = $"Error cargando datos: {ex.Message}";
+            tipoMensaje = "error";
+        }
+    }
+
+    private async Task AsignarRolAsync(string email, string idRolStr)
+    {
+        if (!int.TryParse(idRolStr, out int idRol)) return;
+
+        asignandoRol = true;
+        try
+        {
+            var solicitud = new { email, idRol };
+            var response = await Http.PostAsJsonAsync("/api/admin/asignar-rol", solicitud);
+
+            if (response.IsSuccessStatusCode)
+            {
+                mensaje = "Rol asignado exitosamente.";
+                tipoMensaje = "success";
+                rolSeleccionadoPor[email] = "";
+                await CargarDatosAsync();
+            }
+            else
+            {
+                mensaje = "Error asignando rol.";
+                tipoMensaje = "error";
+            }
+        }
+        catch (Exception ex)
+        {
+            mensaje = $"Error: {ex.Message}";
+            tipoMensaje = "error";
+        }
+        finally
+        {
+            asignandoRol = false;
+        }
+    }
+
+    private async Task RevocarRoleAsync(string email)
+    {
+        // Implementar revocación de roles
+        asignandoRol = true;
+        try
+        {
+            var solicitud = new { email };
+            var response = await Http.DeleteAsync($"/api/admin/revocar-rol?email={email}");
+
+            if (response.IsSuccessStatusCode)
+            {
+                mensaje = "Rol revocado exitosamente.";
+                tipoMensaje = "success";
+                await CargarDatosAsync();
+            }
+            else
+            {
+                mensaje = "Error revocando rol.";
+                tipoMensaje = "error";
+            }
+        }
+        catch (Exception ex)
+        {
+            mensaje = $"Error: {ex.Message}";
+            tipoMensaje = "error";
+        }
+        finally
+        {
+            asignandoRol = false;
+        }
+    }
+
+    private async Task RefrescarDatos()
+    {
+        await CargarDatosAsync();
+    }
+}

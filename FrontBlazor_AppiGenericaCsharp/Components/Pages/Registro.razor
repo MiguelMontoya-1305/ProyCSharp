@@ -1,0 +1,331 @@
+@page "/registro"
+@layout FrontBlazor_AppiGenericaCsharp.Components.Layout.EmptyLayout
+@rendermode InteractiveServer
+@inject HttpClient Http
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<PageTitle>Registro de Cuenta</PageTitle>
+
+<div class="min-vh-100 d-flex align-items-center" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-md-8 col-lg-6">
+                <div class="card shadow-lg border-0" style="border-radius: 15px; overflow: hidden;">
+                    
+                    <!-- HEADER -->
+                    <div class="card-header bg-gradient p-4" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none;">
+                        <h2 class="text-white mb-2" style="font-weight: 600; font-size: 28px;">
+                            <i class="fas fa-user-plus me-2"></i>Crear Cuenta
+                        </h2>
+                        <p class="text-light mb-0" style="opacity: 0.9;">Regístrate en nuestra plataforma empresarial</p>
+                    </div>
+
+                    <!-- BODY -->
+                    <div class="card-body p-4">
+                        
+                        @if (!string.IsNullOrEmpty(mensaje))
+                        {
+                            <div class="alert @(tipoMensaje == "error" ? "alert-danger" : "alert-success") alert-dismissible fade show" role="alert">
+                                <i class="fas @(tipoMensaje == "error" ? "fa-exclamation-circle" : "fa-check-circle") me-2"></i>
+                                @mensaje
+                                <button type="button" class="btn-close" @onclick="() => mensaje = string.Empty"></button>
+                            </div>
+                        }
+
+                        @if (!paso1Completado)
+                        {
+                            <!-- PASO 1: DATOS DE CUENTA Y ROLES -->
+                            <form>
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold text-dark">
+                                        <i class="fas fa-envelope text-primary me-2"></i>Email
+                                    </label>
+                                    <input type="email" 
+                                           class="form-control form-control-lg @(emailValido ? "" : "is-invalid")" 
+                                           placeholder="tu@email.com"
+                                           @bind="email"
+                                           disabled="@enviandoCodigo"
+                                           style="border: 2px solid #e0e0e0; border-radius: 8px;" />
+                                    @if (!emailValido && !string.IsNullOrEmpty(email))
+                                    {
+                                        <small class="text-danger">Email inválido</small>
+                                    }
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold text-dark">
+                                        <i class="fas fa-lock text-primary me-2"></i>Contraseña
+                                    </label>
+                                    <input type="password" 
+                                           class="form-control form-control-lg" 
+                                           placeholder="Mínimo 6 caracteres"
+                                           @bind="contrasena"
+                                           disabled="@enviandoCodigo"
+                                           style="border: 2px solid #e0e0e0; border-radius: 8px;" />
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold text-dark">
+                                        <i class="fas fa-lock-open text-primary me-2"></i>Confirmar Contraseña
+                                    </label>
+                                    <input type="password" 
+                                           class="form-control form-control-lg @(contrasena == confirmarContrasena && !string.IsNullOrEmpty(contrasena) ? "is-valid" : "")" 
+                                           placeholder="Repite tu contraseña"
+                                           @bind="confirmarContrasena"
+                                           disabled="@enviandoCodigo"
+                                           style="border: 2px solid #e0e0e0; border-radius: 8px;" />
+                                </div>
+
+                                <div class="mb-4">
+                                    <label class="form-label fw-semibold text-dark d-block">
+                                        <i class="fas fa-user-tag text-primary me-2"></i>Roles (puedes seleccionar varios)
+                                    </label>
+                                    <div class="row">
+                                        @foreach (var rol in rolesDisponibles.Where(r => r.id != 1)) // Excluir Admin
+                                        {
+                                            <div class="col-md-6 mb-2">
+                                                <div class="form-check p-3 border rounded-3" style="cursor: pointer; background: #f8f9fa; transition: all 0.3s;">
+                                                    <input class="form-check-input" 
+                                                           type="checkbox" 
+                                                           id="rol_@rol.id"
+                                                           @onchange="@((ChangeEventArgs e) => ActualizarRoles(rol.id, (bool)e.Value!))"
+                                                           disabled="@enviandoCodigo" />
+                                                    <label class="form-check-label fw-500 text-dark mb-0" for="rol_@rol.id">
+                                                        @rol.nombre
+                                                    </label>
+                                                </div>
+                                            </div>
+                                        }
+                                    </div>
+                                    @if (rolesSeleccionados.Count == 0)
+                                    {
+                                        <small class="text-muted d-block mt-2">
+                                            <i class="fas fa-info-circle me-1"></i>Debes seleccionar al menos un rol
+                                        </small>
+                                    }
+                                </div>
+
+                                <button type="button" 
+                                        class="btn btn-lg w-100 fw-semibold" 
+                                        style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 8px; padding: 12px;"
+                                        @onclick="EnviarCodigoAsync"
+                                        disabled="@(!PuedeSeguir || enviandoCodigo)">
+                                    @if (enviandoCodigo)
+                                    {
+                                        <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                                        <span>Enviando...</span>
+                                    }
+                                    else
+                                    {
+                                        <span><i class="fas fa-arrow-right me-2"></i>Continuar</span>
+                                    }
+                                </button>
+
+                                <div class="text-center mt-3">
+                                    <p class="text-muted mb-0">
+                                        ¿Ya tienes cuenta? 
+                                        <a href="/login" class="text-decoration-none fw-semibold" style="color: #667eea;">Inicia sesión</a>
+                                    </p>
+                                </div>
+                            </form>
+                        }
+                        else
+                        {
+                            <!-- PASO 2: VERIFICACIÓN DE EMAIL -->
+                            <div class="text-center mb-4">
+                                <div class="mb-3">
+                                    <i class="fas fa-check-circle" style="font-size: 48px; color: #667eea;"></i>
+                                </div>
+                                <h4 class="text-dark">Verifica tu email</h4>
+                                <p class="text-muted">
+                                    Hemos enviado un código de verificación a:<br>
+                                    <strong>@email</strong>
+                                </p>
+                            </div>
+
+                            <div class="mb-4">
+                                <label class="form-label fw-semibold text-dark">
+                                    <i class="fas fa-key text-primary me-2"></i>Código de Verificación (6 dígitos)
+                                </label>
+                                <input type="text" 
+                                       class="form-control form-control-lg text-center" 
+                                       placeholder="000000"
+                                       maxlength="6"
+                                       @bind="codigoVerificacion"
+                                       disabled="@verificando"
+                                       style="font-size: 24px; letter-spacing: 5px; border: 2px solid #e0e0e0; border-radius: 8px; font-weight: bold;" />
+                                <small class="text-muted d-block mt-2">
+                                    <i class="fas fa-clock me-1"></i>El código expira en 10 minutos
+                                </small>
+                            </div>
+
+                            <button type="button" 
+                                    class="btn btn-lg w-100 fw-semibold" 
+                                    style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 8px; padding: 12px;"
+                                    @onclick="VerificarCuentaAsync"
+                                    disabled="@(codigoVerificacion.Length != 6 || verificando)">
+                                @if (verificando)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                                    <span>Verificando...</span>
+                                }
+                                else
+                                {
+                                    <span><i class="fas fa-check me-2"></i>Verificar y Registrar</span>
+                                }
+                            </button>
+
+                            <button type="button" 
+                                    class="btn btn-outline-secondary w-100 mt-2 fw-semibold"
+                                    @onclick="Retroceder"
+                                    disabled="@verificando">
+                                <i class="fas fa-arrow-left me-2"></i>Volver
+                            </button>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private string email = "";
+    private string contrasena = "";
+    private string confirmarContrasena = "";
+    private string codigoVerificacion = "";
+    private string mensaje = "";
+    private string tipoMensaje = "error";
+    private bool paso1Completado = false;
+    private bool enviandoCodigo = false;
+    private bool verificando = false;
+    private List<int> rolesSeleccionados = new();
+    private List<(int id, string nombre)> rolesDisponibles = new();
+
+    private bool emailValido => !string.IsNullOrEmpty(email) && email.Contains("@");
+    private bool contrasenaValida => contrasena.Length >= 6;
+    private bool contrasenasCoinciden => contrasena == confirmarContrasena && !string.IsNullOrEmpty(contrasena);
+    private bool PuedeSeguir => emailValido && contrasenaValida && contrasenasCoinciden && rolesSeleccionados.Count > 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarRolesAsync();
+    }
+
+    private async Task CargarRolesAsync()
+    {
+        try
+        {
+            var response = await Http.GetAsync("/api/rol?limite=50");
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                // Parsear JSON y extraer roles
+                // Por ahora, datos de ejemplo:
+                rolesDisponibles = new()
+                {
+                    (2, "Usuario"),
+                    (3, "Vendedor"),
+                    (4, "Gerente")
+                };
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error cargando roles: {ex.Message}");
+        }
+    }
+
+    private void ActualizarRoles(int idRol, bool seleccionado)
+    {
+        if (seleccionado && !rolesSeleccionados.Contains(idRol))
+            rolesSeleccionados.Add(idRol);
+        else if (!seleccionado)
+            rolesSeleccionados.Remove(idRol);
+    }
+
+    private async Task EnviarCodigoAsync()
+    {
+        if (!PuedeSeguir) return;
+
+        enviandoCodigo = true;
+        try
+        {
+            var solicitud = new { email };
+            var response = await Http.PostAsJsonAsync("/api/registro/solicitar-codigo", solicitud);
+
+            if (response.IsSuccessStatusCode)
+            {
+                paso1Completado = true;
+                mensaje = "Código enviado. Revisa tu email.";
+                tipoMensaje = "success";
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                mensaje = "Error enviando el código. Intenta de nuevo.";
+                tipoMensaje = "error";
+            }
+        }
+        catch (Exception ex)
+        {
+            mensaje = $"Error: {ex.Message}";
+            tipoMensaje = "error";
+        }
+        finally
+        {
+            enviandoCodigo = false;
+        }
+    }
+
+    private async Task VerificarCuentaAsync()
+    {
+        if (codigoVerificacion.Length != 6) return;
+
+        verificando = true;
+        try
+        {
+            var solicitud = new
+            {
+                email,
+                codigoVerificacion,
+                contrasena,
+                confirmarContrasena,
+                idsRoles = rolesSeleccionados
+            };
+
+            var response = await Http.PostAsJsonAsync("/api/registro/verificar", solicitud);
+
+            if (response.IsSuccessStatusCode)
+            {
+                mensaje = "¡Cuenta creada exitosamente! Redirigiendo...";
+                tipoMensaje = "success";
+                await Task.Delay(2000);
+                Navigation.NavigateTo("/login");
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                mensaje = "Error verificando el código. Intenta de nuevo.";
+                tipoMensaje = "error";
+            }
+        }
+        catch (Exception ex)
+        {
+            mensaje = $"Error: {ex.Message}";
+            tipoMensaje = "error";
+        }
+        finally
+        {
+            verificando = false;
+        }
+    }
+
+    private void Retroceder()
+    {
+        paso1Completado = false;
+        codigoVerificacion = "";
+        mensaje = "";
+    }
+}
